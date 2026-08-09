@@ -1,0 +1,7 @@
+.env
+.venv/
+__pycache__/
+*.pyc
+data/magazine_history.json
+current_page.txt
+*.log
