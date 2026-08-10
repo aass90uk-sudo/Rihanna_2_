@@ -2,6 +2,7 @@
 
 import os
 import logging
+import unicodedata
 
 try:
     from dotenv import load_dotenv
@@ -58,8 +59,41 @@ MAGAZINE_1_FILE = os.getenv(
 # المجلة الثانية
 MAGAZINE_2_FILE = os.getenv(
     "MAGAZINE_2_FILE",
-    "القيادة.pdf",
+    "القياده.pdf",
 )
+
+
+def resolve_magazine_file(filename: str) -> str:
+    """يرجع اسم الملف الفعلي مع دعم اختلافات الكتابة العربية البسيطة."""
+    direct_path = os.path.join(MAGAZINE_DIR, filename)
+    if os.path.isfile(direct_path):
+        return filename
+
+    def normalized(value: str) -> str:
+        value = unicodedata.normalize("NFKC", value)
+        # بعض الملفات تُكتب بالتاء المربوطة، وأخرى بالهاء في الاسم نفسه.
+        return value.replace("ة", "ه").casefold()
+
+    wanted = normalized(filename)
+    try:
+        candidates = sorted(
+            name
+            for name in os.listdir(MAGAZINE_DIR)
+            if name.lower().endswith(".pdf")
+            and normalized(name) == wanted
+        )
+    except OSError:
+        candidates = []
+
+    if candidates:
+        resolved = candidates[0]
+        logging.warning(
+            f"[MAGAZINE] اسم الملف مضبوط كـ {filename!r}، "
+            f"وسيتم استخدام الملف الموجود {resolved!r}."
+        )
+        return resolved
+
+    return filename
 
 
 # ==========================================

@@ -118,14 +118,15 @@ def _find_next_unpublished_page(
     كل مجلة لها تسلسل مستقل.
     """
 
+    resolved_pdf_file = config.resolve_magazine_file(pdf_file)
     pdf_path = os.path.join(
         config.MAGAZINE_DIR,
-        pdf_file,
+        resolved_pdf_file,
     )
 
     if not pdf_file.lower().endswith(".pdf"):
         logging.warning(
-            f"[MAGAZINE] الملف ليس PDF: {pdf_file}"
+            f"[MAGAZINE] الملف ليس PDF: {resolved_pdf_file}"
         )
         return None
 
@@ -141,12 +142,12 @@ def _find_next_unpublished_page(
 
     if total <= 0:
         logging.warning(
-            f"[MAGAZINE] لا توجد صفحات في: {pdf_file}"
+            f"[MAGAZINE] لا توجد صفحات في: {resolved_pdf_file}"
         )
         return None
 
     logging.info(
-        f"[MAGAZINE] فحص المجلة: {pdf_file} "
+        f"[MAGAZINE] فحص المجلة: {resolved_pdf_file} "
         f"— إجمالي الصفحات: {total}"
     )
 
@@ -160,7 +161,7 @@ def _find_next_unpublished_page(
         if page is None:
             logging.warning(
                 f"[MAGAZINE] تعذر استخراج "
-                f"صفحة {page_num + 1} من {pdf_file}"
+                f"صفحة {page_num + 1} من {resolved_pdf_file}"
             )
             continue
 
@@ -168,7 +169,7 @@ def _find_next_unpublished_page(
             page.page_hash
         ):
             logging.info(
-                f"[MAGAZINE] {pdf_file} "
+                f"[MAGAZINE] {resolved_pdf_file} "
                 f"— صفحة {page_num + 1} "
                 f"منشورة سابقاً — SKIP"
             )
@@ -176,10 +177,12 @@ def _find_next_unpublished_page(
 
         logging.info(
             f"[MAGAZINE] صفحة جديدة: "
-            f"{pdf_file} — "
+            f"{resolved_pdf_file} — "
             f"{page_num + 1}/{total}"
         )
 
+        # خزّن الاسم الموجود فعلياً كي يكون السجل مفهوماً في Railway.
+        page.pdf_file = resolved_pdf_file
         return page
 
     logging.info(
