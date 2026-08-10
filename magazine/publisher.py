@@ -462,8 +462,8 @@ async def publish_evening(
     """
     النشر المسائي:
 
-    1. المجلة الأولى → صفحة واحدة
-    2. مجلة القيادة → صفحة واحدة
+    1. المجلة الأولى → صفحتان متتاليتان
+    2. مجلة القيادة → صفحتان متتاليتان
 
     لكل مجلة تسلسل مستقل.
     """
@@ -472,44 +472,31 @@ async def publish_evening(
         "========== بداية النشر المسائي =========="
     )
 
-    # --------------------------------------
-    # المجلة الأولى
-    # --------------------------------------
+    magazines = (
+        ("المجلة الأولى", config.MAGAZINE_1_FILE),
+        ("مجلة القيادة", config.MAGAZINE_2_FILE),
+    )
 
-    try:
+    for label, filename in magazines:
+        for page_index in range(2):
+            try:
+                logging.info(
+                    f"[MAGAZINE] {label} مساءً — "
+                    f"بدء الصفحة {page_index + 1} من 2"
+                )
 
-        await publish_magazine_file(
-            bot,
-            config.MAGAZINE_1_FILE,
-            "evening",
-        )
+                await publish_magazine_file(
+                    bot,
+                    filename,
+                    "evening",
+                )
 
-    except Exception as e:
-
-        logging.error(
-            "[MAGAZINE] فشل نشر "
-            f"المجلة الأولى مساءً: {e}"
-        )
-
-    # --------------------------------------
-    # مجلة القيادة
-    # --------------------------------------
-
-    try:
-
-        await publish_magazine_file(
-            bot,
-            config.MAGAZINE_2_FILE,
-            "evening",
-        )
-
-    except Exception as e:
-
-        logging.error(
-            "[MAGAZINE] فشل نشر "
-            f"مجلة القيادة مساءً: {e}"
-        )
+            except Exception as e:
+                logging.error(
+                    f"[MAGAZINE] فشل نشر {label} مساءً — "
+                    f"الصفحة {page_index + 1} من 2: {e}"
+                )
 
     logging.info(
         "========== انتهى النشر المسائي =========="
-        )
+    )
