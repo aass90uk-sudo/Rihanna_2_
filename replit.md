@@ -18,7 +18,10 @@
 | `CHANNEL_USERNAME` | اسم القناة (افتراضي: `@Athar_Dz_Islamic`) |
 | `PDF_PATH` | مسار ملف المجلة (افتراضي: `magazine.pdf`) |
 
-## التشغيل على Railway
+## بيئة العمل
+- **Replit** — تعديل الكود فقط (لا يُشغَّل البوت هنا)
+- **Railway** — التشغيل الدائم للبوت
+
 المشروع جاهز للنشر على Railway:
 - `Procfile` يشغّل البوت عبر: `python main.py`
 - `nixpacks.toml` يحدد Python 3.11
