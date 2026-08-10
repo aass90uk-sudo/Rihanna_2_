@@ -58,7 +58,7 @@ MAGAZINE_1_FILE = os.getenv(
 # المجلة الثانية
 MAGAZINE_2_FILE = os.getenv(
     "MAGAZINE_2_FILE",
-    "القياده.pdf",
+    "القيادة.pdf",
 )
 
 
