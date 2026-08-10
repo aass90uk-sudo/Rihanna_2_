@@ -2,6 +2,7 @@
 
 import io
 import logging
+import os
 from typing import Optional
 
 from telegram import Bot
@@ -33,9 +34,7 @@ def _split_text(
         return []
 
     def telegram_length(value: str) -> int:
-        return len(
-            value.encode("utf-16-le")
-        ) // 2
+        return len(value.encode("utf-16-le")) // 2
 
     def take_part(
         remaining: str,
@@ -50,9 +49,7 @@ def _split_text(
 
         for index, character in enumerate(remaining):
 
-            character_length = telegram_length(
-                character
-            )
+            character_length = telegram_length(character)
 
             if used + character_length > limit:
                 break
@@ -60,9 +57,12 @@ def _split_text(
             used += character_length
             cut = index + 1
 
+        if cut <= 0:
+            return "", remaining
+
         candidate = remaining[:cut]
 
-        # عدم قطع الكلمة إن أمكن
+        # نحاول عدم قطع الكلمة
         boundary = max(
             candidate.rfind("\n"),
             candidate.rfind(" "),
@@ -89,10 +89,17 @@ def _split_text(
         )
 
         if not part:
+            # حماية من الدخول في حلقة لا نهائية
+            # إذا كان هناك حد غير صالح.
+            logging.error(
+                "[MAGAZINE] تعذر تقسيم النص ضمن حد Telegram."
+            )
             break
 
         parts.append(part)
 
+        # الجزء الأول = Caption
+        # الأجزاء التالية = Messages
         limit = next_limit
 
     return parts
@@ -108,25 +115,19 @@ def _find_next_unpublished_page(
     """
     البحث عن أول صفحة غير منشورة داخل ملف PDF محدد.
 
-    مهم:
-    لا يبحث في بقية المجلات.
-
     كل مجلة لها تسلسل مستقل.
     """
 
-    pdf_path = (
-        config.MAGAZINE_DIR
-        + "/"
-        + pdf_file
+    pdf_path = os.path.join(
+        config.MAGAZINE_DIR,
+        pdf_file,
     )
 
-    if not pdf_path.lower().endswith(".pdf"):
+    if not pdf_file.lower().endswith(".pdf"):
         logging.warning(
             f"[MAGAZINE] الملف ليس PDF: {pdf_file}"
         )
         return None
-
-    import os
 
     if not os.path.isfile(pdf_path):
         logging.error(
@@ -145,8 +146,8 @@ def _find_next_unpublished_page(
         return None
 
     logging.info(
-        f"[MAGAZINE] فحص {pdf_file} — "
-        f"{total} صفحة"
+        f"[MAGAZINE] فحص المجلة: {pdf_file} "
+        f"— إجمالي الصفحات: {total}"
     )
 
     for page_num in range(total):
@@ -157,15 +158,19 @@ def _find_next_unpublished_page(
         )
 
         if page is None:
+            logging.warning(
+                f"[MAGAZINE] تعذر استخراج "
+                f"صفحة {page_num + 1} من {pdf_file}"
+            )
             continue
 
         if history.is_page_published(
             page.page_hash
         ):
             logging.info(
-                f"[MAGAZINE] "
-                f"{pdf_file} — "
-                f"صفحة {page_num + 1} منشورة سابقاً — SKIP"
+                f"[MAGAZINE] {pdf_file} "
+                f"— صفحة {page_num + 1} "
+                f"منشورة سابقاً — SKIP"
             )
             continue
 
@@ -186,7 +191,7 @@ def _find_next_unpublished_page(
 
 
 # ==========================================
-# نشر مجلة محددة
+# نشر صفحة من مجلة محددة
 # ==========================================
 
 async def publish_magazine_file(
@@ -197,20 +202,17 @@ async def publish_magazine_file(
     """
     نشر صفحة واحدة من مجلة محددة.
 
-    الصفحة الطويلة قد تنتج:
-    - صورة + نص أول
-    - تكملة 1
-    - تكملة 2
-    - ...
+    إذا كان النص أطول من حد Telegram:
+        صورة + الجزء الأول
+        ثم بقية النص في رسائل مستقلة.
 
-    ولا تسجل الصفحة في التاريخ إلا بعد
-    نجاح إرسال جميع الأجزاء.
+    لا يتم تسجيل الصفحة في السجل
+    إلا بعد نجاح إرسال الصورة وجميع التكملات.
     """
 
     logging.info(
-        f"[MAGAZINE] "
-        f"بدء نشر {pdf_file} "
-        f"({post_type})"
+        f"[MAGAZINE] بدء نشر المجلة: "
+        f"{pdf_file} | النوع: {post_type}"
     )
 
     page = _find_next_unpublished_page(
@@ -234,17 +236,17 @@ async def publish_magazine_file(
         f"{page.page_number + 1}"
     )
 
-    extracted_text = (
-        await vision.extract_text_from_image(
-            page.image_bytes
-        )
+    extracted_text = await vision.extract_text_from_image(
+        page.image_bytes
     )
 
     if extracted_text:
         caption = extracted_text.strip()
     else:
         logging.warning(
-            "[MAGAZINE] لم يتم استخراج نص."
+            f"[MAGAZINE] لم يتم استخراج نص من "
+            f"{pdf_file} — صفحة "
+            f"{page.page_number + 1}"
         )
         caption = ""
 
@@ -253,18 +255,13 @@ async def publish_magazine_file(
     # ======================================
 
     if caption:
-
         full_text = (
             f"{caption}\n\n"
-            f"القناة: "
-            f"{config.CHANNEL_USERNAME}"
+            f"القناة: {config.CHANNEL_USERNAME}"
         )
-
     else:
-
         full_text = (
-            f"القناة: "
-            f"{config.CHANNEL_USERNAME}"
+            f"القناة: {config.CHANNEL_USERNAME}"
         )
 
     # ======================================
@@ -290,27 +287,26 @@ async def publish_magazine_file(
     )
 
     # ======================================
-    # النشر
+    # النشر في Telegram
     # ======================================
 
     try:
 
         logging.info(
-            f"[MAGAZINE] "
-            f"نشر {pdf_file} "
-            f"صفحة {page.page_number + 1}"
+            f"[MAGAZINE] نشر "
+            f"{pdf_file} — صفحة "
+            f"{page.page_number + 1}"
         )
 
-        # ------------------------------
-        # الصورة
-        # ------------------------------
+        # ----------------------------------
+        # نشر الصورة + أول جزء من النص
+        # ----------------------------------
 
         photo = io.BytesIO(
             page.image_bytes
         )
 
         photo.name = (
-            f"{pdf_file}_"
             f"page_{page.page_number + 1}.jpg"
         )
 
@@ -321,12 +317,14 @@ async def publish_magazine_file(
         )
 
         logging.info(
-            "[MAGAZINE] تم نشر الصورة بنجاح."
+            f"[MAGAZINE] تم نشر صورة "
+            f"{pdf_file} — صفحة "
+            f"{page.page_number + 1}"
         )
 
-        # ------------------------------
-        # التكملات
-        # ------------------------------
+        # ----------------------------------
+        # نشر بقية النص
+        # ----------------------------------
 
         for index, part in enumerate(
             continuation_parts,
@@ -339,14 +337,14 @@ async def publish_magazine_file(
             )
 
             logging.info(
-                f"[MAGAZINE] "
-                f"تم إرسال تكملة {index} "
-                f"للصفحة "
-                f"{page.page_number + 1}"
+                f"[MAGAZINE] تم إرسال "
+                f"تكملة {index} "
+                f"لصفحة {page.page_number + 1} "
+                f"من {pdf_file}"
             )
 
         # ==================================
-        # تسجيل الصفحة بعد نجاح كل شيء
+        # تسجيل الصفحة بعد نجاح كل الرسائل
         # ==================================
 
         message_id = (
@@ -368,30 +366,28 @@ async def publish_magazine_file(
         )
 
         logging.info(
-            f"[MAGAZINE] "
-            f"تم تسجيل الصفحة "
+            f"[MAGAZINE] تم تسجيل الصفحة "
             f"{page.page_number + 1} "
-            f"من {pdf_file} "
-            f"كسابقة نشر."
+            f"من {pdf_file} كسابقة نشر."
         )
 
     except TelegramError as e:
 
         logging.error(
-            f"[MAGAZINE] خطأ Telegram "
-            f"أثناء نشر {pdf_file}: {e}"
+            f"[MAGAZINE] خطأ Telegram أثناء "
+            f"نشر {pdf_file}: {e}"
         )
 
     except Exception as e:
 
         logging.error(
-            f"[MAGAZINE] خطأ غير متوقع "
-            f"أثناء نشر {pdf_file}: {e}"
+            f"[MAGAZINE] خطأ غير متوقع أثناء "
+            f"نشر {pdf_file}: {e}"
         )
 
 
 # ==========================================
-# نشر المجلة الأولى والثانية صباحاً
+# النشر الصباحي
 # ==========================================
 
 async def publish_morning(
@@ -400,38 +396,52 @@ async def publish_morning(
     """
     النشر الصباحي:
 
-    المجلة الأولى → صفحة
-    القيادة → صفحة
+    1. المجلة الأولى → صفحة واحدة
+    2. مجلة القيادة → صفحة واحدة
+
+    لكل مجلة تسلسل مستقل.
     """
 
     logging.info(
-        "========== النشر الصباحي =========="
+        "========== بداية النشر الصباحي =========="
     )
 
+    # --------------------------------------
     # المجلة الأولى
+    # --------------------------------------
+
     try:
+
         await publish_magazine_file(
             bot,
             config.MAGAZINE_1_FILE,
             "morning",
         )
+
     except Exception as e:
+
         logging.error(
-            f"[MAGAZINE] "
-            f"فشل نشر المجلة الأولى صباحاً: {e}"
+            "[MAGAZINE] فشل نشر "
+            f"المجلة الأولى صباحاً: {e}"
         )
 
-    # المجلة الثانية
+    # --------------------------------------
+    # مجلة القيادة
+    # --------------------------------------
+
     try:
+
         await publish_magazine_file(
             bot,
             config.MAGAZINE_2_FILE,
             "morning",
         )
+
     except Exception as e:
+
         logging.error(
-            f"[MAGAZINE] "
-            f"فشل نشر القيادة صباحاً: {e}"
+            "[MAGAZINE] فشل نشر "
+            f"مجلة القيادة صباحاً: {e}"
         )
 
     logging.info(
@@ -440,7 +450,7 @@ async def publish_morning(
 
 
 # ==========================================
-# نشر المجلة الأولى والثانية مساءً
+# النشر المسائي
 # ==========================================
 
 async def publish_evening(
@@ -449,38 +459,52 @@ async def publish_evening(
     """
     النشر المسائي:
 
-    المجلة الأولى → صفحة
-    القيادة → صفحة
+    1. المجلة الأولى → صفحة واحدة
+    2. مجلة القيادة → صفحة واحدة
+
+    لكل مجلة تسلسل مستقل.
     """
 
     logging.info(
-        "========== النشر المسائي =========="
+        "========== بداية النشر المسائي =========="
     )
 
+    # --------------------------------------
     # المجلة الأولى
+    # --------------------------------------
+
     try:
+
         await publish_magazine_file(
             bot,
             config.MAGAZINE_1_FILE,
             "evening",
         )
+
     except Exception as e:
+
         logging.error(
-            f"[MAGAZINE] "
-            f"فشل نشر المجلة الأولى مساءً: {e}"
+            "[MAGAZINE] فشل نشر "
+            f"المجلة الأولى مساءً: {e}"
         )
 
-    # المجلة الثانية
+    # --------------------------------------
+    # مجلة القيادة
+    # --------------------------------------
+
     try:
+
         await publish_magazine_file(
             bot,
             config.MAGAZINE_2_FILE,
             "evening",
         )
+
     except Exception as e:
+
         logging.error(
-            f"[MAGAZINE] "
-            f"فشل نشر القيادة مساءً: {e}"
+            "[MAGAZINE] فشل نشر "
+            f"مجلة القيادة مساءً: {e}"
         )
 
     logging.info(
