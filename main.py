@@ -2,73 +2,106 @@ import os
 import asyncio
 import logging
 import random
+
+# ==========================================
+# تفعيل Logging منذ بداية تشغيل البرنامج
+# ==========================================
+
+print("========== STARTING TELEGRAM BOT ==========")
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    force=True,
+)
+
+logging.info("========== MAIN.PY STARTED ==========")
+
+
+# ==========================================
+# مكتبات Telegram
+# ==========================================
+
 from telegram import Bot, Update
 from telegram.constants import ParseMode
 from telegram.error import TelegramError
-from telegram.ext import Application, MessageHandler, CommandHandler, filters, ContextTypes
+from telegram.ext import (
+    Application,
+    MessageHandler,
+    CommandHandler,
+    filters,
+    ContextTypes,
+)
+
+
+# ==========================================
+# مكتبات الجدولة والذكاء الاصطناعي
+# ==========================================
+
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from groq import Groq
 import pytz
 
-# نظام المجلة الجديد (استخراج صفحات PDF + منع التكرار بالـ Hash)
+
+# ==========================================
+# نظام المجلات
+# ==========================================
+
 from magazine import config as mag_config
 from magazine.publisher import publish_morning, publish_evening
 
-# إعداد التسجيل (Logging)
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s",
-)
 
 # ==========================================
-# إعدادات المتغيرات البيئية والمعلومات الأساسية
+# إعدادات البوت
 # ==========================================
+
 TELEGRAM_TOKEN = mag_config.TELEGRAM_TOKEN
 CHANNEL_USERNAME = mag_config.CHANNEL_USERNAME
 GROQ_API_KEY = mag_config.GROQ_API_KEY
 
-# حدود تيليجرام
 TG_CAPTION_LIMIT = mag_config.TG_CAPTION_LIMIT
 TG_MESSAGE_LIMIT = mag_config.TG_MESSAGE_LIMIT
 
-# التذييل الإجباري لمنشورات كل 3 ساعات
 MANDATORY_FOOTER = mag_config.MANDATORY_FOOTER
 
-# تهيئة مكتبة Groq
+
+# ==========================================
+# تهيئة Groq
+# ==========================================
+
 groq_client = (
     Groq(api_key=GROQ_API_KEY)
-    if GROQ_API_KEY and GROQ_API_KEY != "ضع_مفتاح_جروج_هنا"
+    if GROQ_API_KEY
+    and GROQ_API_KEY != "ضع_مفتاح_جروج_هنا"
     else None
 )
 
 
 # ==========================================
-# وظيفة النشر كل 3 ساعات عبر Groq
+# منشور دوري كل 3 ساعات
 # ==========================================
+
 async def generate_motivational_content():
-    """توليد توجيهات ونصائح تحفيزية بدون إيموجي ومع هاشتاجات مرتبة."""
+    """توليد منشور إيماني وتوجيهي."""
 
     fallback_messages = [
         (
-            "إلى الإخوة والأخوات الموحدين: ثباتكم على الحق هو الحصن المنيع "
-            "للأمة. استعينوا بالله ولا تعجزوا، وكونوا دائماً يداً واحدة "
-            "ودرعاً حامياً لقضايا أمتكم الإسلامية.\n\n"
-            "#ثبات_الموحدين\n"
-            "#سبحان_الله"
+            "نسأل الله أن يثبت القلوب على الخير، "
+            "وأن يرزقنا الصبر والإخلاص وحسن العمل.\n\n"
+            "#ثبات\n"
+            "#الصبر"
         ),
         (
-            "نصيحة للموحدين المناصرين: اجعلوا عملكم خالصاً لوجه الله، "
-            "وتسلحوا بالوعي والعلم، واعلموا أن كلمة الحق ونصرة المظلوم "
-            "هي سهم في حماية الأمة ودفع الظلم عنها.\n\n"
-            "#نصرة_الحق\n"
-            "#الحمدلله_ربي"
+            "اجعلوا العلم والوعي والصبر أساساً في حياتكم، "
+            "وكونوا من أهل الكلمة الطيبة والعمل الصالح.\n\n"
+            "#وعي\n"
+            "#العمل_الصالح"
         ),
         (
-            "يا أبناء الأمة الإسلامية: إن الأمة اليوم بأشد الحاجة إلى الوعي "
-            "والثبات. كونوا درعاً للأمة ونوراً يضيء طريق الموحدين بالتذكير "
-            "والدعاء والنصرة بالكلمة الطيبة.\n\n"
-            "#وعي_الأمة\n"
-            "#الله_أكبر"
+            "الثبات على الخير يحتاج إلى صبر وإخلاص، "
+            "فاستعينوا بالله وأكثروا من الدعاء والعمل الصالح.\n\n"
+            "#الإخلاص\n"
+            "#الدعاء"
         ),
     ]
 
@@ -76,19 +109,16 @@ async def generate_motivational_content():
         return random.choice(fallback_messages)
 
     prompt = """
-أكتب منشوراً إيمانياً وتوجيهياً قصيراً ومؤثراً وموجهاً للإخوة والأخوات
-الموحدين المناصرين.
+أكتب منشوراً إيمانياً وتوجيهياً قصيراً ومؤثراً.
 
-المواضيع المطلوبة:
-1. نصائح وتوجيهات هامة للموحدين في الثبات، الصبر، الإخلاص، والوعي.
-2. رسائل تحفيزية ومشجعة تحثهم على حماية الأمة ونصرة قضاياها بالكلمة والحق.
-
-التعليمات الصارمة:
-- أسلوب قوي، إيماني، وبليغ.
-- يمنع منعاً باتاً استخدام أي إيموجي أو رموز تعبيرية.
-- أضف هاشتاجات مناسبة في النهاية بحيث يكون كل هاشتاج في سطر منفصل.
-- الطول: فقرة إلى فقرتين قصيرة فقط.
-- أعد النص مباشرة بدون مقدمات أو كلام جانبي.
+المطلوب:
+- نصيحة عن الصبر والثبات والإخلاص والوعي.
+- أسلوب عربي جميل ومؤثر.
+- لا تستخدم أي إيموجي أو رموز تعبيرية.
+- أضف هاشتاجات مناسبة في النهاية.
+- كل هاشتاج في سطر مستقل.
+- المنشور فقرة أو فقرتان قصيرتان.
+- أعد النص مباشرة بدون مقدمات.
 """
 
     try:
@@ -97,7 +127,12 @@ async def generate_motivational_content():
         response = await loop.run_in_executor(
             None,
             lambda: groq_client.chat.completions.create(
-                messages=[{"role": "user", "content": prompt}],
+                messages=[
+                    {
+                        "role": "user",
+                        "content": prompt,
+                    }
+                ],
                 model="llama-3.3-70b-versatile",
                 temperature=0.6,
             ),
@@ -106,18 +141,27 @@ async def generate_motivational_content():
         return response.choices[0].message.content
 
     except Exception as e:
-        logging.error(f"خطأ في Groq أثناء توليد منشور الثلاث ساعات: {e}")
+        logging.error(
+            f"خطأ في Groq أثناء توليد المنشور الدوري: {e}"
+        )
+
         return random.choice(fallback_messages)
 
 
 async def publish_interval_post(bot: Bot):
-    """النشر التلقائي كل 3 ساعات مع التذييل الإجباري."""
+    """النشر التلقائي كل 3 ساعات."""
 
     try:
-        logging.info("جاري إعداد ونشر المنشور الدوري بواسطة Groq...")
+        logging.info(
+            "جاري إعداد ونشر المنشور الدوري..."
+        )
 
         content = await generate_motivational_content()
-        final_post = f"{content}\n\n{MANDATORY_FOOTER}"
+
+        final_post = (
+            f"{content}\n\n"
+            f"{MANDATORY_FOOTER}"
+        )
 
         await bot.send_message(
             chat_id=CHANNEL_USERNAME,
@@ -125,24 +169,34 @@ async def publish_interval_post(bot: Bot):
             parse_mode=ParseMode.MARKDOWN,
         )
 
-        logging.info("تم نشر المنشور الدوري بنجاح.")
+        logging.info(
+            "تم نشر المنشور الدوري بنجاح."
+        )
 
     except TelegramError as e:
-        logging.error(f"خطأ في إرسال المنشور الدوري على تيليجرام: {e}")
+
+        logging.error(
+            f"خطأ Telegram في المنشور الدوري: {e}"
+        )
 
     except Exception as e:
-        logging.error(f"حدث خطأ في عملية النشر الدوري: {e}")
+
+        logging.error(
+            f"خطأ غير متوقع في المنشور الدوري: {e}"
+        )
 
 
 # ==========================================
-# الرد والتفاعل مع رسائل الأعضاء والمجموعة
+# التعليق على منشورات القناة
 # ==========================================
-async def generate_channel_post_comment(post_text: str) -> str:
-    """توليد تعليق تلقائي على منشورات القناة."""
+
+async def generate_channel_post_comment(
+    post_text: str,
+) -> str:
 
     fallback = (
         "بارك الله فيكم على هذا المنشور القيّم.\n"
-        "نسأل الله أن ينفع به الأمة ويجعله في ميزان حسنات الجميع."
+        "نسأل الله أن ينفع به ويجعله في ميزان الحسنات."
     )
 
     if not groq_client:
@@ -150,17 +204,14 @@ async def generate_channel_post_comment(post_text: str) -> str:
 
     prompt = f"""
 أنت مشرف متفاعل في مجموعة تيليجرام.
-القناة نشرت هذا المنشور وظهر في المجموعة.
 
 نص المنشور:
 {post_text[:1000]}
 
-المطلوب:
-- اكتب تعليقاً قصيراً ومحفزاً على هذا المنشور.
-- اجعل التعليق في خمسة أسطر كحد أقصى.
-- استخدم أسلوباً إيمانياً دافئاً يشجع على التفاعل والقراءة.
-- يمنع استخدام أي إيموجي أو رموز تعبيرية.
-- اكتب التعليق مباشرة بدون مقدمات.
+اكتب تعليقاً قصيراً ومفيداً ودافئاً.
+لا تستخدم أي إيموجي.
+لا يزيد التعليق عن خمسة أسطر.
+اكتب التعليق مباشرة.
 """
 
     try:
@@ -169,7 +220,12 @@ async def generate_channel_post_comment(post_text: str) -> str:
         response = await loop.run_in_executor(
             None,
             lambda: groq_client.chat.completions.create(
-                messages=[{"role": "user", "content": prompt}],
+                messages=[
+                    {
+                        "role": "user",
+                        "content": prompt,
+                    }
+                ],
                 model="llama-3.3-70b-versatile",
                 temperature=0.5,
                 max_tokens=200,
@@ -179,16 +235,26 @@ async def generate_channel_post_comment(post_text: str) -> str:
         return response.choices[0].message.content
 
     except Exception as e:
-        logging.error(f"خطأ في Groq أثناء توليد تعليق منشور القناة: {e}")
+
+        logging.error(
+            f"خطأ في Groq أثناء توليد التعليق: {e}"
+        )
+
         return fallback
 
 
-async def generate_islamic_reply(user_message: str, user_name: str) -> str:
-    """توليد رد تلقائي على رسائل الأعضاء."""
+# ==========================================
+# الرد على رسائل الأعضاء
+# ==========================================
+
+async def generate_islamic_reply(
+    user_message: str,
+    user_name: str,
+) -> str:
 
     fallback = (
         f"أهلاً بك أخي/أختي {user_name}.\n"
-        "جزاك الله خيراً وبارك الله فيك، ونسأل الله أن يثبتنا وإياك على الحق."
+        "جزاك الله خيراً وبارك الله فيك."
     )
 
     if not groq_client:
@@ -196,20 +262,19 @@ async def generate_islamic_reply(user_message: str, user_name: str) -> str:
 
     prompt = f"""
 أنت مساعد ومشرف في مجموعة تيليجرام.
-تتحدث بأسلوب لطيف ومحبب ومباشر.
 
 رسالة العضو ({user_name}):
 {user_message}
 
 المطلوب:
-- أجب أو تفاعل مع الرسالة بشكل مختصر ومفيد ومؤدب ودافئ.
-- إذا كانت الرسالة سؤالاً عاماً، أجب بما يناسب السؤال.
-- إذا كانت مشاركة أو تحية أو تعليقاً، رد بتحية طيبة ودعاء مناسب.
-- اختم بدعاء أو جملة تحفيزية قصيرة.
-- يمنع استخدام أي إيموجي أو رموز تعبيرية.
-- الرد لا يزيد عن أربعة إلى خمسة أسطر.
+- رد مختصر ومفيد ومؤدب.
+- إذا كانت تحية فرد بتحية طيبة.
+- إذا كان سؤالاً عاماً فأجب بما يناسبه.
+- استخدم أسلوباً دافئاً.
+- لا تستخدم أي إيموجي.
+- لا يزيد الرد عن خمسة أسطر.
 - لا تذكر أنك ذكاء اصطناعي.
-- اكتب الرد مباشرة بدون مقدمات.
+- اكتب الرد مباشرة.
 """
 
     try:
@@ -218,7 +283,12 @@ async def generate_islamic_reply(user_message: str, user_name: str) -> str:
         response = await loop.run_in_executor(
             None,
             lambda: groq_client.chat.completions.create(
-                messages=[{"role": "user", "content": prompt}],
+                messages=[
+                    {
+                        "role": "user",
+                        "content": prompt,
+                    }
+                ],
                 model="llama-3.3-70b-versatile",
                 temperature=0.5,
                 max_tokens=300,
@@ -228,17 +298,25 @@ async def generate_islamic_reply(user_message: str, user_name: str) -> str:
         return response.choices[0].message.content
 
     except Exception as e:
-        logging.error(f"خطأ في Groq أثناء توليد الرد: {e}")
+
+        logging.error(
+            f"خطأ في Groq أثناء توليد الرد: {e}"
+        )
+
         return fallback
 
+
+# ==========================================
+# معالجة رسائل المجموعة
+# ==========================================
 
 async def handle_group_message(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
 ):
-    """معالجة رسائل المجموعة والرسائل الخاصة."""
 
     try:
+
         message = update.message
 
         if not message or not message.text:
@@ -246,21 +324,28 @@ async def handle_group_message(
 
         user_text = message.text.strip()
 
-        # منشور قناة مستورد تلقائياً إلى المجموعة
         is_channel_post = (
             message.sender_chat is not None
             and message.sender_chat.type == "channel"
         )
 
         if is_channel_post:
-            logging.info("منشور قناة جديد في المجموعة، جاري التعليق عليه...")
+
+            logging.info(
+                "منشور قناة جديد في المجموعة، "
+                "جاري التعليق عليه..."
+            )
 
             await context.bot.send_chat_action(
                 chat_id=message.chat_id,
                 action="typing",
             )
 
-            comment = await generate_channel_post_comment(user_text)
+            comment = (
+                await generate_channel_post_comment(
+                    user_text
+                )
+            )
 
             await message.reply_text(
                 text=comment,
@@ -269,8 +354,10 @@ async def handle_group_message(
 
             return
 
-        # تجاهل رسائل البوتات الأخرى
-        if message.from_user and message.from_user.is_bot:
+        if (
+            message.from_user
+            and message.from_user.is_bot
+        ):
             return
 
         user_name = (
@@ -279,7 +366,10 @@ async def handle_group_message(
             else "عضو"
         )
 
-        logging.info(f"رسالة من {user_name}: {user_text[:50]}...")
+        logging.info(
+            f"رسالة من {user_name}: "
+            f"{user_text[:50]}..."
+        )
 
         await context.bot.send_chat_action(
             chat_id=message.chat_id,
@@ -297,76 +387,105 @@ async def handle_group_message(
         )
 
     except TelegramError as e:
-        logging.error(f"خطأ Telegram في معالجة الرسالة: {e}")
+
+        logging.error(
+            f"خطأ Telegram في معالجة الرسالة: {e}"
+        )
 
     except Exception as e:
-        logging.error(f"خطأ غير متوقع في معالجة الرسالة: {e}")
+
+        logging.error(
+            f"خطأ غير متوقع في معالجة الرسالة: {e}"
+        )
 
 
 # ==========================================
-# أوامر تجريبية للنشر الفوري
+# أمر اختبار الصباح
 # ==========================================
+
 async def test_command(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
 ):
-    """اختبار نشر صفحة الصباح والمنشور الدوري."""
 
     try:
+
         await update.message.reply_text(
-            "جاري اختبار النشر الفوري للمجلة والمنشور الدوري..."
+            "جاري اختبار نشر المجلات والمنشور الدوري..."
         )
 
-        await publish_morning(context.bot)
-        await publish_interval_post(context.bot)
+        await publish_morning(
+            context.bot
+        )
+
+        await publish_interval_post(
+            context.bot
+        )
 
         await update.message.reply_text(
-            "تم إرسال المنشورات بنجاح إلى القناة."
+            "تم إرسال منشورات الاختبار بنجاح."
         )
 
     except Exception as e:
+
         await update.message.reply_text(
             f"حدث خطأ أثناء الاختبار: {e}"
         )
 
+
+# ==========================================
+# أمر اختبار المساء
+# ==========================================
 
 async def test_evening_command(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
 ):
-    """اختبار نشر صفحة المساء."""
 
     try:
+
         await update.message.reply_text(
-            "جاري اختبار نشر صفحة المساء..."
+            "جاري اختبار نشر صفحات المساء..."
         )
 
-        await publish_evening(context.bot)
+        await publish_evening(
+            context.bot
+        )
 
         await update.message.reply_text(
-            "تم إرسال صفحة المساء بنجاح."
+            "تم إرسال صفحات المساء بنجاح."
         )
 
     except Exception as e:
+
         await update.message.reply_text(
             f"حدث خطأ أثناء الاختبار: {e}"
         )
 
 
 # ==========================================
-# المحرك والجدولة الرئيسية
+# تشغيل الجدولة
 # ==========================================
-async def post_init(application: Application) -> None:
-    """تفعيل جدولة المهام تلقائياً."""
+
+async def post_init(
+    application: Application,
+) -> None:
 
     bot = application.bot
-    tz = pytz.timezone("Africa/Algiers")
 
-    scheduler = AsyncIOScheduler(timezone=tz)
+    # توقيت الجزائر
+    tz = pytz.timezone(
+        "Africa/Algiers"
+    )
 
-    # نشر المجلة:
-    # صفحة الصباح الساعة 08:00
-    # صفحة المساء الساعة 19:00
+    scheduler = AsyncIOScheduler(
+        timezone=tz
+    )
+
+    # ======================================
+    # المجلات صباحاً
+    # ======================================
+
     scheduler.add_job(
         publish_morning,
         "cron",
@@ -374,6 +493,10 @@ async def post_init(application: Application) -> None:
         minute=0,
         args=[bot],
     )
+
+    # ======================================
+    # المجلات مساءً
+    # ======================================
 
     scheduler.add_job(
         publish_evening,
@@ -383,7 +506,10 @@ async def post_init(application: Application) -> None:
         args=[bot],
     )
 
+    # ======================================
     # المنشور الدوري كل 3 ساعات
+    # ======================================
+
     scheduler.add_job(
         publish_interval_post,
         "interval",
@@ -392,22 +518,55 @@ async def post_init(application: Application) -> None:
     )
 
     scheduler.start()
-    application.bot_data["scheduler"] = scheduler
 
-    logging.info("تم تشغيل الجدولة بنجاح.")
+    application.bot_data[
+        "scheduler"
+    ] = scheduler
+
+    logging.info(
+        "تم تشغيل الجدولة بنجاح."
+    )
+
+    logging.info(
+        "موعد المجلات: 08:00 و 19:00 "
+        "بتوقيت Africa/Algiers."
+    )
 
 
-async def post_stop(application: Application) -> None:
-    """إيقاف الجدولة بأمان."""
+# ==========================================
+# إيقاف الجدولة
+# ==========================================
 
-    scheduler = application.bot_data.get("scheduler")
+async def post_stop(
+    application: Application,
+) -> None:
 
-    if scheduler and scheduler.running:
+    scheduler = application.bot_data.get(
+        "scheduler"
+    )
+
+    if (
+        scheduler
+        and scheduler.running
+    ):
+
         scheduler.shutdown()
-        logging.info("تم إيقاف الجدولة بأمان.")
 
+        logging.info(
+            "تم إيقاف الجدولة بأمان."
+        )
+
+
+# ==========================================
+# تشغيل البوت
+# ==========================================
 
 def main():
+
+    logging.info(
+        "جاري إنشاء تطبيق Telegram..."
+    )
+
     application = (
         Application.builder()
         .token(TELEGRAM_TOKEN)
@@ -416,29 +575,53 @@ def main():
         .build()
     )
 
+    # ======================================
     # أوامر الاختبار
+    # ======================================
+
     application.add_handler(
-        CommandHandler("test", test_command)
+        CommandHandler(
+            "test",
+            test_command,
+        )
     )
 
     application.add_handler(
-        CommandHandler("test_evening", test_evening_command)
+        CommandHandler(
+            "test_evening",
+            test_evening_command,
+        )
     )
 
-    # معالج الرسائل النصية
+    # ======================================
+    # الرسائل النصية
+    # ======================================
+
     application.add_handler(
         MessageHandler(
-            filters.TEXT & ~filters.COMMAND,
+            filters.TEXT
+            & ~filters.COMMAND,
             handle_group_message,
         )
     )
 
-    logging.info("البوت يعمل ومستعد للاستجابة...")
+    logging.info(
+        "البوت يعمل ومستعد للاستجابة..."
+    )
+
+    logging.info(
+        "بدء Telegram polling..."
+    )
 
     application.run_polling(
         drop_pending_updates=True
     )
 
 
+# ==========================================
+# نقطة البداية
+# ==========================================
+
 if __name__ == "__main__":
+
     main()
