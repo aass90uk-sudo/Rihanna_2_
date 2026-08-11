@@ -10,7 +10,6 @@ from . import config
 
 _client: Optional[Groq] = None
 
-
 def _get_client() -> Optional[Groq]:
     global _client
     if _client is not None:
@@ -21,7 +20,6 @@ def _get_client() -> Optional[Groq]:
     _client = Groq(api_key=config.GROQ_API_KEY)
     return _client
 
-
 # تعليمات صارمة لاستخراج النص فقط بدون تغيير أو إضافة
 _OCR_PROMPT = (
     "استخرج النص الموجود في صورة صفحة المجلة بدقة شديدة، "
@@ -29,7 +27,6 @@ _OCR_PROMPT = (
     "ولا تلخص المحتوى، ولا تغير الكلمات. "
     "النص الناتج يجب أن يكون هو النص الموجود في الصفحة نفسها."
 )
-
 
 def _call_vision(image_bytes: bytes) -> str:
     """استدعاء متزامن لنموذج الرؤية — يُغلّف بـ run_in_executor."""
@@ -56,7 +53,6 @@ def _call_vision(image_bytes: bytes) -> str:
     )
     return response.choices[0].message.content.strip()
 
-
 async def extract_text_from_image(image_bytes: bytes) -> str:
     """يستخرج النص من صورة الصفحة عبر Groq Vision (async)."""
     client = _get_client()
@@ -71,3 +67,4 @@ async def extract_text_from_image(image_bytes: bytes) -> str:
     except Exception as e:
         logging.error(f"[MAGAZINE] خطأ أثناء استخراج النص بالرؤية: {e}")
         return ""
+        
