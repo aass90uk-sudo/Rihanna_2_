@@ -15,7 +15,6 @@ import fitz  # PyMuPDF
 
 from . import config
 
-
 @dataclass
 class PageImage:
     """صفحة واحدة محوّلة إلى صورة مع بياناتها."""
@@ -24,7 +23,6 @@ class PageImage:
     total_pages: int     # إجمالي صفحات هذا الملف
     image_bytes: bytes   # bytes الصورة بصيغة JPEG
     page_hash: str       # SHA-256 لمحتوى الصورة
-
 
 def list_pdf_files() -> List[str]:
     """يرجع قائمة مسارات ملفات PDF المرتبة داخل مجلد المجلة."""
@@ -43,7 +41,6 @@ def list_pdf_files() -> List[str]:
         logging.info(f"[MAGAZINE] PDF found: {p}")
     return pdfs
 
-
 def get_total_pages(pdf_path: str) -> int:
     """يرجع عدد صفحات ملف PDF (يدعم PDF السليم والملف التالف)."""
     count = _get_total_pages_native(pdf_path)
@@ -51,7 +48,6 @@ def get_total_pages(pdf_path: str) -> int:
         return count
     # fallback: عدّ صور JPEG المضمّنة
     return _count_embedded_jpegs(pdf_path)
-
 
 def _get_total_pages_native(pdf_path: str) -> int:
     """يحاول قراءة عدد الصفحات عبر PyMuPDF (PDF سليم)."""
@@ -62,7 +58,6 @@ def _get_total_pages_native(pdf_path: str) -> int:
         return total
     except Exception:
         return 0
-
 
 def _count_embedded_jpegs(pdf_path: str) -> int:
     """يعدّ صور JPEG المضمّنة في ملف PDF تالف (fallback)."""
@@ -84,7 +79,6 @@ def _count_embedded_jpegs(pdf_path: str) -> int:
         return count
     except Exception:
         return 0
-
 
 def _extract_embedded_jpegs(pdf_path: str) -> List[bytes]:
     """يستخرج صور JPEG الخام من ملف (عندما يكون PDF التالف بدون بنية صفحات)."""
@@ -108,7 +102,6 @@ def _extract_embedded_jpegs(pdf_path: str) -> List[bytes]:
         pos = end + 2
     return images
 
-
 def render_page(pdf_path: str, page_number: int) -> Optional[PageImage]:
     """يحوّل صفحة واحدة إلى صورة JPEG ويحسب بصمتها (SHA-256).
 
@@ -122,7 +115,6 @@ def render_page(pdf_path: str, page_number: int) -> Optional[PageImage]:
 
     # المحاولة الثانية: استخراج JPEG من ملف تالف
     return _render_page_from_jpegs(pdf_path, page_number)
-
 
 def _render_page_native(pdf_path: str, page_number: int) -> Optional[PageImage]:
     """يستخرج صفحة عبر PyMuPDF (PDF سليم)."""
@@ -158,7 +150,6 @@ def _render_page_native(pdf_path: str, page_number: int) -> Optional[PageImage]:
         )
     except Exception:
         return None
-
 
 def _render_page_from_jpegs(pdf_path: str, page_number: int) -> Optional[PageImage]:
     """يستخرج صورة JPEG من ملف تالف (fallback)."""
