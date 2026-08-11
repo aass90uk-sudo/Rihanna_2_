@@ -17,7 +17,6 @@ logging.basicConfig(
 
 logging.info("========== MAIN.PY STARTED ==========")
 
-
 # ==========================================
 # مكتبات Telegram
 # ==========================================
@@ -33,7 +32,6 @@ from telegram.ext import (
     ContextTypes,
 )
 
-
 # ==========================================
 # مكتبات الجدولة والذكاء الاصطناعي
 # ==========================================
@@ -42,14 +40,12 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from groq import Groq
 import pytz
 
-
 # ==========================================
 # نظام المجلات
 # ==========================================
 
 from magazine import config as mag_config
 from magazine.publisher import publish_morning, publish_evening
-
 
 # ==========================================
 # إعدادات البوت
@@ -64,7 +60,6 @@ TG_MESSAGE_LIMIT = mag_config.TG_MESSAGE_LIMIT
 
 MANDATORY_FOOTER = mag_config.MANDATORY_FOOTER
 
-
 # ==========================================
 # تهيئة Groq
 # ==========================================
@@ -75,7 +70,6 @@ groq_client = (
     and GROQ_API_KEY != "ضع_مفتاح_جروج_هنا"
     else None
 )
-
 
 # ==========================================
 # منشور دوري كل 3 ساعات
@@ -147,7 +141,6 @@ async def generate_motivational_content():
 
         return random.choice(fallback_messages)
 
-
 async def publish_interval_post(bot: Bot):
     """النشر التلقائي كل 3 ساعات."""
 
@@ -184,7 +177,6 @@ async def publish_interval_post(bot: Bot):
         logging.error(
             f"خطأ غير متوقع في المنشور الدوري: {e}"
         )
-
 
 # ==========================================
 # التعليق على منشورات القناة
@@ -241,7 +233,6 @@ async def generate_channel_post_comment(
         )
 
         return fallback
-
 
 # ==========================================
 # الرد على رسائل الأعضاء
@@ -304,7 +295,6 @@ async def generate_islamic_reply(
         )
 
         return fallback
-
 
 # ==========================================
 # معالجة رسائل المجموعة
@@ -398,7 +388,6 @@ async def handle_group_message(
             f"خطأ غير متوقع في معالجة الرسالة: {e}"
         )
 
-
 # ==========================================
 # أمر اختبار الصباح
 # ==========================================
@@ -432,7 +421,6 @@ async def test_command(
             f"حدث خطأ أثناء الاختبار: {e}"
         )
 
-
 # ==========================================
 # أمر اختبار المساء
 # ==========================================
@@ -461,7 +449,6 @@ async def test_evening_command(
         await update.message.reply_text(
             f"حدث خطأ أثناء الاختبار: {e}"
         )
-
 
 # ==========================================
 # تشغيل الجدولة
@@ -532,7 +519,6 @@ async def post_init(
         "بتوقيت Africa/Algiers."
     )
 
-
 # ==========================================
 # إيقاف الجدولة
 # ==========================================
@@ -555,7 +541,6 @@ async def post_stop(
         logging.info(
             "تم إيقاف الجدولة بأمان."
         )
-
 
 # ==========================================
 # تشغيل البوت
@@ -617,7 +602,6 @@ def main():
         drop_pending_updates=True
     )
 
-
 # ==========================================
 # نقطة البداية
 # ==========================================
@@ -625,3 +609,4 @@ def main():
 if __name__ == "__main__":
 
     main()
+        
