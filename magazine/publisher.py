@@ -8,8 +8,7 @@ from typing import Optional
 from telegram import Bot
 from telegram.error import TelegramError
 
-from . import config, pdf_manager, history, vision
-
+from . import config, pdf_manager, history
 
 # ==========================================
 # تقسيم النص حسب حدود Telegram
@@ -104,7 +103,6 @@ def _split_text(
 
     return parts
 
-
 # ==========================================
 # البحث عن صفحة داخل مجلة محددة
 # ==========================================
@@ -192,7 +190,6 @@ def _find_next_unpublished_page(
 
     return None
 
-
 # ==========================================
 # نشر صفحة من مجلة محددة
 # ==========================================
@@ -213,59 +210,53 @@ async def publish_magazine_file(
     إلا بعد نجاح إرسال الصورة وجميع التكملات.
     """
 
-    logging.info(
-        f"[MAGAZINE] بدء نشر المجلة: "
-        f"{pdf_file} | النوع: {post_type}"
-    )
+    logging.info(f"[MAGAZINE] Processing: {pdf_file}")
+
+    is_ocr_enabled = pdf_file == config.MAGAZINE_1_FILE
+    if is_ocr_enabled:
+        logging.info(f"[MAGAZINE] OCR enabled: {pdf_file}")
+    else:
+        logging.info(f"[MAGAZINE] OCR disabled: {pdf_file}")
 
     page = _find_next_unpublished_page(
         pdf_file
     )
 
     if page is None:
-        logging.info(
-            f"[MAGAZINE] لا توجد صفحة جديدة "
-            f"في {pdf_file}"
-        )
+        logging.info("[MAGAZINE] No new pages available")
         return
 
-    # ======================================
-    # استخراج النص من نفس صورة الصفحة
-    # ======================================
+    page_number = page.page_number + 1
+    logging.info(f"[MAGAZINE] Next page for {pdf_file}: {page_number}")
 
-    logging.info(
-        f"[MAGAZINE] استخراج النص من "
-        f"{pdf_file} — صفحة "
-        f"{page.page_number + 1}"
+    magazine_name = (
+        config.MAGAZINE_1_NAME
+        if is_ocr_enabled
+        else config.MAGAZINE_2_NAME
     )
 
-    extracted_text = await vision.extract_text_from_image(
-        page.image_bytes
-    )
+    caption_lines = [
+        f"📖 {magazine_name}",
+        f"📄 الصفحة: {page_number}",
+    ]
 
-    if extracted_text:
-        caption = extracted_text.strip()
-    else:
-        logging.warning(
-            f"[MAGAZINE] لم يتم استخراج نص من "
-            f"{pdf_file} — صفحة "
-            f"{page.page_number + 1}"
+    if is_ocr_enabled:
+        logging.info(
+            f"[MAGAZINE] Extracting text from {pdf_file} — page {page_number}"
         )
-        caption = ""
+        extracted_text = await vision.extract_text_from_image(page.image_bytes)
+        if extracted_text:
+            caption_lines.append(extracted_text.strip())
+        else:
+            logging.warning(
+                f"[MAGAZINE] No text extracted from {pdf_file} — page {page_number}"
+            )
 
-    # ======================================
-    # إضافة اسم القناة
-    # ======================================
-
-    if caption:
-        full_text = (
-            f"{caption}\n\n"
-            f"القناة: {config.CHANNEL_USERNAME}"
-        )
-    else:
-        full_text = (
-            f"القناة: {config.CHANNEL_USERNAME}"
-        )
+    caption_lines.extend([
+        "",
+        f"القناة: {config.CHANNEL_USERNAME}",
+    ])
+    full_text = "\n".join(caption_lines)
 
     # ======================================
     # تقسيم النص
@@ -388,7 +379,6 @@ async def publish_magazine_file(
             f"نشر {pdf_file}: {e}"
         )
 
-
 # ==========================================
 # النشر الصباحي
 # ==========================================
@@ -451,7 +441,6 @@ async def publish_morning(
         "========== انتهى النشر الصباحي =========="
     )
 
-
 # ==========================================
 # النشر المسائي
 # ==========================================
@@ -498,3 +487,4 @@ async def publish_evening(
     logging.info(
         "========== انتهى النشر المسائي =========="
     )
+    
