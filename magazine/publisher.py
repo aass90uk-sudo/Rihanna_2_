@@ -1,4 +1,4 @@
-"""ناشر المجلات مع استخراج النص ومنع التكرار وتقسيم نصوص تيليجرام."""
+"""ناشر مجلة القيادة مع استخراج النص ومنع التكرار وتقسيم نصوص تيليجرام."""
 
 import io
 import logging
@@ -8,7 +8,8 @@ from typing import Optional
 from telegram import Bot
 from telegram.error import TelegramError
 
-from . import config, pdf_manager, history
+from . import config, pdf_manager, history, vision
+
 
 # ==========================================
 # تقسيم النص حسب حدود Telegram
@@ -33,7 +34,9 @@ def _split_text(
         return []
 
     def telegram_length(value: str) -> int:
-        return len(value.encode("utf-16-le")) // 2
+        return len(
+            value.encode("utf-16-le")
+        ) // 2
 
     def take_part(
         remaining: str,
@@ -46,9 +49,13 @@ def _split_text(
         cut = 0
         used = 0
 
-        for index, character in enumerate(remaining):
+        for index, character in enumerate(
+            remaining
+        ):
 
-            character_length = telegram_length(character)
+            character_length = telegram_length(
+                character
+            )
 
             if used + character_length > limit:
                 break
@@ -88,11 +95,11 @@ def _split_text(
         )
 
         if not part:
-            # حماية من الدخول في حلقة لا نهائية
-            # إذا كان هناك حد غير صالح.
+
             logging.error(
                 "[MAGAZINE] تعذر تقسيم النص ضمن حد Telegram."
             )
+
             break
 
         parts.append(part)
@@ -103,35 +110,43 @@ def _split_text(
 
     return parts
 
+
 # ==========================================
-# البحث عن صفحة داخل مجلة محددة
+# البحث عن صفحة غير منشورة
 # ==========================================
 
 def _find_next_unpublished_page(
     pdf_file: str,
 ) -> Optional[pdf_manager.PageImage]:
     """
-    البحث عن أول صفحة غير منشورة داخل ملف PDF محدد.
-
-    كل مجلة لها تسلسل مستقل.
+    البحث عن أول صفحة غير منشورة داخل ملف مجلة القيادة.
     """
 
-    resolved_pdf_file = config.resolve_magazine_file(pdf_file)
+    resolved_pdf_file = config.resolve_magazine_file(
+        pdf_file
+    )
+
     pdf_path = os.path.join(
         config.MAGAZINE_DIR,
         resolved_pdf_file,
     )
 
     if not pdf_file.lower().endswith(".pdf"):
+
         logging.warning(
-            f"[MAGAZINE] الملف ليس PDF: {resolved_pdf_file}"
+            f"[MAGAZINE] الملف ليس PDF: "
+            f"{resolved_pdf_file}"
         )
+
         return None
 
     if not os.path.isfile(pdf_path):
+
         logging.error(
-            f"[MAGAZINE] ملف المجلة غير موجود: {pdf_path}"
+            f"[MAGAZINE] ملف المجلة غير موجود: "
+            f"{pdf_path}"
         )
+
         return None
 
     total = pdf_manager.get_total_pages(
@@ -139,13 +154,17 @@ def _find_next_unpublished_page(
     )
 
     if total <= 0:
+
         logging.warning(
-            f"[MAGAZINE] لا توجد صفحات في: {resolved_pdf_file}"
+            f"[MAGAZINE] لا توجد صفحات في: "
+            f"{resolved_pdf_file}"
         )
+
         return None
 
     logging.info(
-        f"[MAGAZINE] فحص المجلة: {resolved_pdf_file} "
+        f"[MAGAZINE] فحص المجلة: "
+        f"{resolved_pdf_file} "
         f"— إجمالي الصفحات: {total}"
     )
 
@@ -157,20 +176,25 @@ def _find_next_unpublished_page(
         )
 
         if page is None:
+
             logging.warning(
                 f"[MAGAZINE] تعذر استخراج "
-                f"صفحة {page_num + 1} من {resolved_pdf_file}"
+                f"صفحة {page_num + 1} "
+                f"من {resolved_pdf_file}"
             )
+
             continue
 
         if history.is_page_published(
             page.page_hash
         ):
+
             logging.info(
                 f"[MAGAZINE] {resolved_pdf_file} "
                 f"— صفحة {page_num + 1} "
                 f"منشورة سابقاً — SKIP"
             )
+
             continue
 
         logging.info(
@@ -179,8 +203,10 @@ def _find_next_unpublished_page(
             f"{page_num + 1}/{total}"
         )
 
-        # خزّن الاسم الموجود فعلياً كي يكون السجل مفهوماً في Railway.
+        # خزّن الاسم الموجود فعلياً
+        # كي يكون السجل مفهوماً في Railway.
         page.pdf_file = resolved_pdf_file
+
         return page
 
     logging.info(
@@ -190,8 +216,9 @@ def _find_next_unpublished_page(
 
     return None
 
+
 # ==========================================
-# نشر صفحة من مجلة محددة
+# نشر صفحة من مجلة القيادة
 # ==========================================
 
 async def publish_magazine_file(
@@ -200,63 +227,135 @@ async def publish_magazine_file(
     post_type: str,
 ) -> None:
     """
-    نشر صفحة واحدة من مجلة محددة.
+    نشر صفحة واحدة من مجلة القيادة.
 
+    الصورة + النص المستخرج في المنشور الأول.
     إذا كان النص أطول من حد Telegram:
-        صورة + الجزء الأول
-        ثم بقية النص في رسائل مستقلة.
+    يتم إرسال بقية النص في رسائل مستقلة.
 
     لا يتم تسجيل الصفحة في السجل
     إلا بعد نجاح إرسال الصورة وجميع التكملات.
     """
 
-    logging.info(f"[MAGAZINE] Processing: {pdf_file}")
+    logging.info(
+        f"[MAGAZINE] Processing: {pdf_file}"
+    )
 
-    is_ocr_enabled = pdf_file == config.MAGAZINE_1_FILE
+    # ======================================
+    # OCR مفعّل لمجلة القيادة
+    # ======================================
+
+    is_ocr_enabled = (
+        pdf_file == config.MAGAZINE_2_FILE
+    )
+
     if is_ocr_enabled:
-        logging.info(f"[MAGAZINE] OCR enabled: {pdf_file}")
+
+        logging.info(
+            f"[MAGAZINE] OCR enabled: "
+            f"{pdf_file}"
+        )
+
     else:
-        logging.info(f"[MAGAZINE] OCR disabled: {pdf_file}")
+
+        logging.info(
+            f"[MAGAZINE] OCR disabled: "
+            f"{pdf_file}"
+        )
+
+    # ======================================
+    # البحث عن الصفحة التالية
+    # ======================================
 
     page = _find_next_unpublished_page(
         pdf_file
     )
 
     if page is None:
-        logging.info("[MAGAZINE] No new pages available")
+
+        logging.info(
+            "[MAGAZINE] No new pages available"
+        )
+
         return
 
-    page_number = page.page_number + 1
-    logging.info(f"[MAGAZINE] Next page for {pdf_file}: {page_number}")
+    page_number = (
+        page.page_number + 1
+    )
+
+    logging.info(
+        f"[MAGAZINE] Next page for "
+        f"{pdf_file}: {page_number}"
+    )
+
+    # ======================================
+    # اسم مجلة القيادة
+    # ======================================
 
     magazine_name = (
-        config.MAGAZINE_1_NAME
-        if is_ocr_enabled
-        else config.MAGAZINE_2_NAME
+        config.MAGAZINE_2_NAME
     )
+
+    # ======================================
+    # عنوان المنشور
+    # ======================================
 
     caption_lines = [
         f"📖 {magazine_name}",
         f"📄 الصفحة: {page_number}",
     ]
 
+    # ======================================
+    # استخراج النص من صورة الصفحة
+    # ======================================
+
     if is_ocr_enabled:
+
         logging.info(
-            f"[MAGAZINE] Extracting text from {pdf_file} — page {page_number}"
+            f"[MAGAZINE] Extracting text "
+            f"from {pdf_file} — "
+            f"page {page_number}"
         )
-        extracted_text = await vision.extract_text_from_image(page.image_bytes)
+
+        extracted_text = (
+            await vision.extract_text_from_image(
+                page.image_bytes
+            )
+        )
+
         if extracted_text:
-            caption_lines.append(extracted_text.strip())
-        else:
-            logging.warning(
-                f"[MAGAZINE] No text extracted from {pdf_file} — page {page_number}"
+
+            caption_lines.append(
+                extracted_text.strip()
             )
 
-    caption_lines.extend([
-        "",
-        f"القناة: {config.CHANNEL_USERNAME}",
-    ])
-    full_text = "\n".join(caption_lines)
+            logging.info(
+                f"[MAGAZINE] تم استخراج النص "
+                f"من صفحة {page_number}"
+            )
+
+        else:
+
+            logging.warning(
+                f"[MAGAZINE] No text extracted "
+                f"from {pdf_file} — "
+                f"page {page_number}"
+            )
+
+    # ======================================
+    # رابط القناة
+    # ======================================
+
+    caption_lines.extend(
+        [
+            "",
+            f"القناة: {config.CHANNEL_USERNAME}",
+        ]
+    )
+
+    full_text = "\n".join(
+        caption_lines
+    )
 
     # ======================================
     # تقسيم النص
@@ -379,6 +478,7 @@ async def publish_magazine_file(
             f"نشر {pdf_file}: {e}"
         )
 
+
 # ==========================================
 # النشر الصباحي
 # ==========================================
@@ -389,38 +489,12 @@ async def publish_morning(
     """
     النشر الصباحي:
 
-    1. المجلة الأولى → صفحة واحدة
-    2. مجلة القيادة → صفحة واحدة
-
-    لكل مجلة تسلسل مستقل.
+    مجلة القيادة → صفحة واحدة.
     """
 
     logging.info(
         "========== بداية النشر الصباحي =========="
     )
-
-    # --------------------------------------
-    # المجلة الأولى
-    # --------------------------------------
-
-    try:
-
-        await publish_magazine_file(
-            bot,
-            config.MAGAZINE_1_FILE,
-            "morning",
-        )
-
-    except Exception as e:
-
-        logging.error(
-            "[MAGAZINE] فشل نشر "
-            f"المجلة الأولى صباحاً: {e}"
-        )
-
-    # --------------------------------------
-    # مجلة القيادة
-    # --------------------------------------
 
     try:
 
@@ -441,6 +515,7 @@ async def publish_morning(
         "========== انتهى النشر الصباحي =========="
     )
 
+
 # ==========================================
 # النشر المسائي
 # ==========================================
@@ -451,40 +526,33 @@ async def publish_evening(
     """
     النشر المسائي:
 
-    1. المجلة الأولى → صفحة واحدة
-    2. مجلة القيادة → صفحة واحدة
-
-    لكل مجلة تسلسل مستقل.
+    مجلة القيادة → صفحة واحدة.
     """
 
     logging.info(
         "========== بداية النشر المسائي =========="
     )
 
-    magazines = (
-        ("المجلة الأولى", config.MAGAZINE_1_FILE),
-        ("مجلة القيادة", config.MAGAZINE_2_FILE),
-    )
+    try:
 
-    for label, filename in magazines:
-        try:
-            logging.info(
-                f"[MAGAZINE] {label} مساءً — نشر صفحة واحدة "
-                "مع إرسال بقية النص كمنشورات منفردة عند الحاجة."
-            )
+        logging.info(
+            "[MAGAZINE] مجلة القيادة مساءً — "
+            "نشر صفحة واحدة مع استخراج النص "
+            "وإرسال بقية النص كمنشورات منفردة عند الحاجة."
+        )
 
-            await publish_magazine_file(
-                bot,
-                filename,
-                "evening",
-            )
+        await publish_magazine_file(
+            bot,
+            config.MAGAZINE_2_FILE,
+            "evening",
+        )
 
-        except Exception as e:
-            logging.error(
-                f"[MAGAZINE] فشل نشر {label} مساءً: {e}"
-            )
+    except Exception as e:
+
+        logging.error(
+            f"[MAGAZINE] فشل نشر مجلة القيادة مساءً: {e}"
+        )
 
     logging.info(
         "========== انتهى النشر المسائي =========="
-    )
-    
+            )
