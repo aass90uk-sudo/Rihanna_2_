@@ -43,36 +43,43 @@ MAGAZINE_DIR = os.getenv(
 )
 
 # ==========================================
-# ملفات المجلات
+# مجلة القيادة فقط
 # ==========================================
 
-# المجلة الأولى
-MAGAZINE_1_FILE = os.getenv(
-    "MAGAZINE_1_FILE",
-    "magazine_issue_5.pdf",
-)
-
-# المجلة الثانية
 MAGAZINE_2_FILE = os.getenv(
     "MAGAZINE_2_FILE",
     "القياده.pdf",
 )
 
-MAGAZINE_1_NAME = "مجلة المشتاقون إلى الجنة «المغرب الإسلامي»"
 MAGAZINE_2_NAME = "مجلة القيادة العليا «من هم الجاهدون في جزيرة العرب» مؤسسة الم لا حم"
+
 
 def resolve_magazine_file(filename: str) -> str:
     """يرجع اسم الملف الفعلي مع دعم اختلافات الكتابة العربية البسيطة."""
-    direct_path = os.path.join(MAGAZINE_DIR, filename)
+
+    direct_path = os.path.join(
+        MAGAZINE_DIR,
+        filename,
+    )
+
     if os.path.isfile(direct_path):
         return filename
 
     def normalized(value: str) -> str:
-        value = unicodedata.normalize("NFKC", value)
-        # بعض الملفات تُكتب بالتاء المربوطة، وأخرى بالهاء في الاسم نفسه.
-        return value.replace("ة", "ه").casefold()
+        value = unicodedata.normalize(
+            "NFKC",
+            value,
+        )
+
+        # بعض الملفات تُكتب بالتاء المربوطة،
+        # وأخرى بالهاء في الاسم نفسه.
+        return value.replace(
+            "ة",
+            "ه",
+        ).casefold()
 
     wanted = normalized(filename)
+
     try:
         candidates = sorted(
             name
@@ -84,21 +91,27 @@ def resolve_magazine_file(filename: str) -> str:
         candidates = []
 
     if candidates:
+
         resolved = candidates[0]
+
         logging.warning(
             f"[MAGAZINE] اسم الملف مضبوط كـ {filename!r}، "
             f"وسيتم استخدام الملف الموجود {resolved!r}."
         )
+
         return resolved
 
     return filename
+
 
 # ==========================================
 # حدود Telegram
 # ==========================================
 
 TG_CAPTION_LIMIT = 1024
+
 TG_MESSAGE_LIMIT = 4096
+
 
 # ==========================================
 # جودة الصور
@@ -111,6 +124,7 @@ PDF_DPI = int(
     )
 )
 
+
 # ==========================================
 # نموذج Groq للرؤية
 # ==========================================
@@ -119,6 +133,7 @@ GROQ_VISION_MODEL = os.getenv(
     "GROQ_VISION_MODEL",
     "llama-3.2-90b-vision-preview",
 )
+
 
 # ==========================================
 # التذييل الإجباري
@@ -129,6 +144,7 @@ MANDATORY_FOOTER = (
     "غفر الله لها وجعلها في ميزان حسناتها."
 )
 
+
 # ==========================================
 # السجل المحلي
 # ==========================================
@@ -137,6 +153,7 @@ LOCAL_HISTORY_FILE = os.getenv(
     "LOCAL_HISTORY_FILE",
     "data/magazine_history.json",
 )
+
 
 # ==========================================
 # Bolt Database
@@ -152,6 +169,7 @@ SUPABASE_KEY = (
     or os.getenv("VITE_SUPABASE_ANON_KEY")
 )
 
+
 # ==========================================
 # Logging
 # ==========================================
@@ -161,11 +179,7 @@ logging.info(
 )
 
 logging.info(
-    f"[MAGAZINE] المجلة الأولى: {MAGAZINE_1_FILE}"
-)
-
-logging.info(
-    f"[MAGAZINE] المجلة الثانية: {MAGAZINE_2_FILE}"
+    f"[MAGAZINE] مجلة القيادة: {MAGAZINE_2_FILE}"
 )
 
 logging.info(
