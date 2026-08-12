@@ -112,14 +112,15 @@ def _split_text(
 
 
 # ==========================================
-# البحث عن صفحة غير منشورة
+# البحث عن صفحة داخل مجلة القيادة
 # ==========================================
 
 def _find_next_unpublished_page(
     pdf_file: str,
 ) -> Optional[pdf_manager.PageImage]:
     """
-    البحث عن أول صفحة غير منشورة داخل ملف مجلة القيادة.
+    البحث عن أول صفحة غير منشورة داخل ملف PDF الخاص
+    بمجلة القيادة.
     """
 
     resolved_pdf_file = config.resolve_magazine_file(
@@ -230,8 +231,9 @@ async def publish_magazine_file(
     نشر صفحة واحدة من مجلة القيادة.
 
     الصورة + النص المستخرج في المنشور الأول.
+
     إذا كان النص أطول من حد Telegram:
-    يتم إرسال بقية النص في رسائل مستقلة.
+        يتم إرسال بقية النص في رسائل مستقلة.
 
     لا يتم تسجيل الصفحة في السجل
     إلا بعد نجاح إرسال الصورة وجميع التكملات.
@@ -245,23 +247,9 @@ async def publish_magazine_file(
     # OCR مفعّل لمجلة القيادة
     # ======================================
 
-    is_ocr_enabled = (
-        pdf_file == config.MAGAZINE_2_FILE
+    logging.info(
+        f"[MAGAZINE] OCR enabled: {pdf_file}"
     )
-
-    if is_ocr_enabled:
-
-        logging.info(
-            f"[MAGAZINE] OCR enabled: "
-            f"{pdf_file}"
-        )
-
-    else:
-
-        logging.info(
-            f"[MAGAZINE] OCR disabled: "
-            f"{pdf_file}"
-        )
 
     # ======================================
     # البحث عن الصفحة التالية
@@ -309,38 +297,36 @@ async def publish_magazine_file(
     # استخراج النص من صورة الصفحة
     # ======================================
 
-    if is_ocr_enabled:
+    logging.info(
+        f"[MAGAZINE] Extracting text "
+        f"from {pdf_file} — "
+        f"page {page_number}"
+    )
+
+    extracted_text = (
+        await vision.extract_text_from_image(
+            page.image_bytes
+        )
+    )
+
+    if extracted_text:
+
+        caption_lines.append(
+            extracted_text.strip()
+        )
 
         logging.info(
-            f"[MAGAZINE] Extracting text "
+            f"[MAGAZINE] تم استخراج النص "
+            f"من صفحة {page_number}"
+        )
+
+    else:
+
+        logging.warning(
+            f"[MAGAZINE] No text extracted "
             f"from {pdf_file} — "
             f"page {page_number}"
         )
-
-        extracted_text = (
-            await vision.extract_text_from_image(
-                page.image_bytes
-            )
-        )
-
-        if extracted_text:
-
-            caption_lines.append(
-                extracted_text.strip()
-            )
-
-            logging.info(
-                f"[MAGAZINE] تم استخراج النص "
-                f"من صفحة {page_number}"
-            )
-
-        else:
-
-            logging.warning(
-                f"[MAGAZINE] No text extracted "
-                f"from {pdf_file} — "
-                f"page {page_number}"
-            )
 
     # ======================================
     # رابط القناة
@@ -537,8 +523,8 @@ async def publish_evening(
 
         logging.info(
             "[MAGAZINE] مجلة القيادة مساءً — "
-            "نشر صفحة واحدة مع استخراج النص "
-            "وإرسال بقية النص كمنشورات منفردة عند الحاجة."
+            "نشر صفحة واحدة مع إرسال بقية النص "
+            "كمنشورات منفردة عند الحاجة."
         )
 
         await publish_magazine_file(
